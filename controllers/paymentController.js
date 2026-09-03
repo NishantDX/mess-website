@@ -1,6 +1,10 @@
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const Payment = require("../models/paymentModel");
+const Attendance = require("../models/attendanceModel");
+const Student = require("../models/studentModel");
+
+const COST_PER_MEAL = 50;
 
 // Initialize Razorpay instance
 const razorpay = new Razorpay({
@@ -84,8 +88,74 @@ const getPaymentHistory = async (req, res) => {
   }
 };
 
+// GET /api/payments/summary — per-student billing status for the admin panel.
+// owed = (meals eaten) * COST_PER_MEAL ; paid = sum of successful payments.
+const getPaymentsSummary = async (req, res) => {
+  try {
+    const [students, mealAgg, payAgg] = await Promise.all([
+      Student.find({}, { student_id: 1, name: 1, department: 1, _id: 0 }).lean(),
+      Attendance.aggregate([{ $group: { _id: "$student_id", meals: { $sum: 1 } } }]),
+      Payment.aggregate([
+        { $match: { status: "success" } },
+        { $group: { _id: "$student_id", paid: { $sum: "$amount" } } },
+      ]),
+    ]);
+
+    const mealsBy = {};
+    mealAgg.forEach((m) => { mealsBy[m._id] = m.meals; });
+    const paidBy = {};
+    payAgg.forEach((p) => { paidBy[p._id] = p.paid; });
+
+    let collected = 0, pending = 0, paidCount = 0, partialCount = 0, unpaidCount = 0;
+
+    const records = students.map((s) => {
+      const meals = mealsBy[s.student_id] || 0;
+      const owed = meals * COST_PER_MEAL;
+      const paid = paidBy[s.student_id] || 0;
+
+      let status = "Unpaid";
+      if (owed > 0 && paid >= owed) status = "Paid";
+      else if (paid > 0) status = "Partial";
+
+      if (status === "Paid") paidCount++;
+      else if (status === "Partial") partialCount++;
+      else unpaidCount++;
+
+      collected += Math.min(paid, owed || paid);
+      pending += Math.max(owed - paid, 0);
+
+      return {
+        student_id: s.student_id,
+        name: s.name,
+        department: s.department || "-",
+        meals,
+        owed,
+        paid,
+        status,
+      };
+    });
+
+    records.sort((a, b) => b.owed - a.owed);
+
+    res.status(200).json({
+      records,
+      stats: {
+        totalStudents: students.length,
+        paidCount,
+        partialCount,
+        unpaidCount,
+        collected,
+        pending,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 module.exports = {
   initiatePayment,
   verifyPayment,
-  getPaymentHistory
+  getPaymentHistory,
+  getPaymentsSummary,
 };

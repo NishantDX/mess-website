@@ -1,7 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const paymentController = require("../controllers/paymentController");
-const { verifyToken } = require("../middleware/firebaseAdmin");
+const { verifyToken, verifyAdmin } = require("../middleware/firebaseAdmin");
+
+// Admin: per-student billing status (owed vs paid)
+router.get("/summary", verifyAdmin, paymentController.getPaymentsSummary);
 
 // Route to create Razorpay order
 router.post("/create-order", verifyToken, paymentController.initiatePayment);
