@@ -64,17 +64,17 @@ class AttendanceSimulator {
     return { date: dateStr, inserted };
   }
 
-  /** Fill the last `days` days (default 45) so charts have history immediately. */
+  /** Fill the last `days` days plus today so charts have data immediately. */
   async backfill(days = 45) {
     const ids = await this.simStudentIds();
     let total = 0;
-    for (let i = days; i >= 1; i--) {
+    for (let i = days; i >= 0; i--) {
       const d = new Date();
       d.setUTCDate(d.getUTCDate() - i);
       const r = await this.simulateDay(AttendanceSimulator.ymd(d), ids);
       total += r.inserted;
     }
-    console.log(`[sim] backfill complete: ${total} rows over ${days} days`);
+    console.log(`[sim] backfill complete: ${total} rows over ${days + 1} days`);
     return total;
   }
 
