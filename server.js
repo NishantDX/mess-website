@@ -15,6 +15,7 @@ const paymentRoutes = require("./routes/paymentRoutes");
 const express = require("express"); //step 1
 const cors = require("cors");
 const CronService = require("./services/cronService");
+const AttendanceSimulator = require("./services/attendanceSimulator");
 require("./config/redis"); // optional cache — no-op unless REDIS_URL is set
 
 const app = express(); //step 2
@@ -35,6 +36,9 @@ mongoose
       // Initialize and start cron jobs
       const cronService = new CronService();
       cronService.startCronJobs();
+
+      // Demo-only: daily synthetic attendance. No-op unless SIMULATE_ATTENDANCE=true.
+      new AttendanceSimulator().start();
     });
   })
   .catch((err) => {
