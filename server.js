@@ -15,6 +15,7 @@ const paymentRoutes = require("./routes/paymentRoutes");
 const express = require("express"); //step 1
 const cors = require("cors");
 const CronService = require("./services/cronService");
+require("./config/redis"); // optional cache — no-op unless REDIS_URL is set
 
 const app = express(); //step 2
 app.use(express.json());

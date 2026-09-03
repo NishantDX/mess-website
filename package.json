@@ -19,6 +19,7 @@
     "express": "^5.1.0",
     "firebase": "^11.6.0",
     "firebase-admin": "^13.3.0",
+    "ioredis": "^5.4.1",
     "moment": "^2.30.1",
     "mongoose": "^8.12.1",
     "node-cron": "^4.2.1",
