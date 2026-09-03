@@ -116,6 +116,9 @@ const getAllAttendance = async (req, res) => {
     // Count total records matching the query
     const totalRecords = await Attendance.countDocuments(query);
 
+    // How many distinct days the data spans (used for average-attendance math)
+    const distinctDates = await Attendance.distinct("date", query);
+
     // Get meal distribution
     const mealDistribution = await Attendance.aggregate([
       { $match: query },
@@ -142,6 +145,7 @@ const getAllAttendance = async (req, res) => {
 
     res.status(200).json({
       totalRecords,
+      totalDays: distinctDates.length,
       mealCounts,
       records: attendanceRecords,
     });
