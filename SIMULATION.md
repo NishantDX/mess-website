@@ -10,21 +10,25 @@ are exercised with a **simulated** user base rather than real adoption:
 This is test/demo data. It is not real usage and is labelled as such wherever
 it is described.
 
-## One-time setup
+## Setup — just one env var
+
+Set `SIMULATE_ATTENDANCE=true` in the backend environment and (re)deploy.
+
+On first boot with that flag, the server **self-seeds**: creates the ~200 SIM
+students and backfills ~45 days of attendance in the background (it doesn't
+delay startup). It then schedules a daily job (21:30) that adds one more day.
+All of it is idempotent — it only runs the seed/backfill when the data isn't
+already there, and it only ever writes `SIM`-prefixed records.
+
+Optional overrides: `SIM_STUDENT_COUNT` (default 200), `SIM_BACKFILL_DAYS`
+(default 45).
+
+### Or run it manually (needs a local clone with MONGO_URI)
 
 ```bash
-node scripts/seedStudents.js 200          # create the synthetic students
-node scripts/backfillAttendance.js 45     # ~45 days of history so charts fill in
+node scripts/seedStudents.js 200
+node scripts/backfillAttendance.js 45
 ```
-
-Both scripts are idempotent and only ever write records whose `student_id`
-starts with `SIM` — real students and their data are never touched.
-
-## Keeping it running
-
-Set `SIMULATE_ATTENDANCE=true` in the backend environment. On boot the server
-schedules a daily job (21:30) that adds one more day of synthetic attendance.
-With the flag unset, nothing runs.
 
 ## Storage stays bounded
 

@@ -13,7 +13,7 @@
 const cron = require("node-cron");
 const Student = require("../models/studentModel");
 const Attendance = require("../models/attendanceModel");
-const { SIM_PREFIX, rateFor } = require("./simData");
+const { SIM_PREFIX, rateFor, makeStudent } = require("./simData");
 
 class AttendanceSimulator {
   constructor() {
@@ -78,9 +78,43 @@ class AttendanceSimulator {
     return total;
   }
 
-  /** Schedule the daily run. Call once at server start. */
+  /**
+   * First-boot bootstrap: seed the SIM students and backfill history if they
+   * aren't there yet. Idempotent — safe to call on every start. Runs in the
+   * background so it never delays the server coming up.
+   */
+  async bootstrap() {
+    const count = parseInt(process.env.SIM_STUDENT_COUNT, 10) || 200;
+    const days = parseInt(process.env.SIM_BACKFILL_DAYS, 10) || 45;
+
+    const haveStudents = await Student.countDocuments({
+      student_id: { $regex: `^${SIM_PREFIX}` },
+    });
+    if (haveStudents < count) {
+      const docs = Array.from({ length: count }, (_, i) => makeStudent(i + 1));
+      await Student.bulkWrite(
+        docs.map((d) => ({
+          updateOne: { filter: { student_id: d.student_id }, update: { $setOnInsert: d }, upsert: true },
+        })),
+        { ordered: false }
+      );
+      console.log(`[sim] seeded synthetic students (target ${count})`);
+    }
+
+    const haveAttendance = await Attendance.countDocuments({
+      student_id: { $regex: `^${SIM_PREFIX}` },
+    });
+    if (haveAttendance < count) {
+      await this.backfill(days);
+    }
+  }
+
+  /** Schedule the daily run + first-boot bootstrap. Call once at server start. */
   start() {
     if (!this.enabled) return;
+
+    this.bootstrap().catch((e) => console.warn("[sim] bootstrap failed:", e.message));
+
     // 21:30 every day — after dinner service.
     cron.schedule("30 21 * * *", () => {
       this.simulateDay(AttendanceSimulator.ymd(new Date())).catch((e) =>
