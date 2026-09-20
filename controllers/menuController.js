@@ -33,11 +33,26 @@ async function addOrUpdateMenu(req, res) {
       menu.dinner = dinner;
       await menu.save();
       await cacheDel(WEEK_KEY, dayKey(day));
+      // Real-time push: anyone with the app open finds out immediately,
+      // without polling or reloading. Guarded so a socket problem never
+      // breaks the actual menu update.
+      try {
+        const io = req.app.get("io");
+        if (io) io.emit("menu:updated", { day, menu });
+      } catch (e) {
+        console.warn("[socket] failed to emit menu:updated:", e.message);
+      }
       return res.status(200).json({ message: "Menu updated", menu });
     } else {
       // Add new menu
       const newMenu = await Menu.create({ day, breakfast, lunch, dinner });
       await cacheDel(WEEK_KEY, dayKey(day));
+      try {
+        const io = req.app.get("io");
+        if (io) io.emit("menu:updated", { day, menu: newMenu });
+      } catch (e) {
+        console.warn("[socket] failed to emit menu:updated:", e.message);
+      }
       return res.status(201).json({ message: "Menu added", menu: newMenu });
     }
 

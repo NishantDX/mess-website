@@ -14,6 +14,8 @@ const cronRoutes = require("./routes/cronRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const express = require("express"); //step 1
 const cors = require("cors");
+const http = require("http");
+const { Server } = require("socket.io");
 const CronService = require("./services/cronService");
 const AttendanceSimulator = require("./services/attendanceSimulator");
 require("./config/redis"); // optional cache — no-op unless REDIS_URL is set
@@ -26,10 +28,26 @@ app.use(
     origin: "*",
   })
 );
+
+// Socket.IO needs the raw HTTP server, not just the Express app, so requests
+// can be upgraded to a WebSocket connection.
+const httpServer = http.createServer(app);
+const io = new Server(httpServer, {
+  cors: { origin: "*" },
+});
+app.set("io", io); // controllers reach this via req.app.get('io')
+
+io.on("connection", (socket) => {
+  console.log("[socket] client connected:", socket.id);
+  socket.on("disconnect", () => {
+    console.log("[socket] client disconnected:", socket.id);
+  });
+});
+
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
-    app.listen(process.env.PORT, () => {
+    httpServer.listen(process.env.PORT, () => {
       //step 3
       console.log("listening on port 5000");
 
