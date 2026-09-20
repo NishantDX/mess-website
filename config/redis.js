@@ -39,6 +39,18 @@ if (REDIS_URL) {
       loggedError = false;
       console.log("[redis] connected");
     });
+
+    // Upstash closes idle TCP connections after a short period of
+    // inactivity — with enableOfflineQueue:false, the next command after
+    // that hits a dead connection and fails immediately ("Connection is
+    // closed") instead of transparently reconnecting. A periodic PING
+    // keeps the connection active so it never goes idle long enough for
+    // Upstash to close it. .catch() is required: if a ping happens to land
+    // during a brief reconnect, that's fine — the interval just tries
+    // again next time, it must never throw and crash the process.
+    setInterval(() => {
+      client.ping().catch(() => {});
+    }, 30000).unref(); // unref: this timer alone should never keep the process alive
   } catch (err) {
     // A malformed REDIS_URL (e.g. accidentally pasting a `redis-cli ...`
     // command instead of a plain URL) throws SYNCHRONOUSLY here, before any
