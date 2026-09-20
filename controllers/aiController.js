@@ -31,17 +31,26 @@ const getDemandForecast = async (req, res) => {
     const targetDateStr = targetDate.format("YYYY-MM-DD");
     const targetWeekday = targetDate.format("dddd");
 
-    const attendanceData = await Attendance.find({});
+    // Build the exact list of past same-weekday date strings up front (every
+    // 7 days back, up to a year), and ask MongoDB only for those — instead
+    // of pulling the ENTIRE attendance collection into Node and filtering it
+    // there. This was the actual cause of a ~10s response time once the
+    // synthetic data grew large: fetching everything, every single call.
+    const candidateDates = [];
+    for (let weeksBack = 1; weeksBack <= 52; weeksBack++) {
+      candidateDates.push(
+        moment(targetDate).subtract(7 * weeksBack, "days").format("YYYY-MM-DD")
+      );
+    }
 
-    // Group historical records by date, restricted to the same weekday as
-    // the target date, so we're comparing "past Mondays" to "this Monday"
-    // rather than mixing in unrelated days of the week.
+    const attendanceData = await Attendance.find({ date: { $in: candidateDates } });
+
+    // Group historical records by date. No weekday check needed anymore —
+    // candidateDates already only contains same-weekday dates.
     const mealCountsByDate = {};
 
     attendanceData.forEach((record) => {
       if (record.date === targetDateStr) return; // never count the day we're forecasting
-      const recordWeekday = moment(record.date, "YYYY-MM-DD").format("dddd");
-      if (recordWeekday !== targetWeekday) return;
 
       if (!mealCountsByDate[record.date]) {
         mealCountsByDate[record.date] = { breakfast: 0, lunch: 0, dinner: 0 };
