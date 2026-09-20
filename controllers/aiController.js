@@ -8,9 +8,15 @@ const moment = require('moment');
  * This is a simple heuristic, not a trained model: it looks at every past
  * date that fell on the same weekday as the target date (e.g. every past
  * Monday, if forecasting a Monday), and averages how many students ate each
- * meal on those days. It does not track food quantities or wastage — it
- * only estimates expected headcount per meal, which a kitchen could use as
- * an input when deciding how much to prepare.
+ * meal on those days.
+ *
+ * It also reports `estimatedPrepReductionPct`: an estimate of how much less
+ * a kitchen might need to prepare if it cooked to this forecast instead of
+ * always preparing for the historical PEAK turnout on that weekday (the
+ * common "just in case" default). This is computed directly from the same
+ * historical data — real numbers, not a fabricated figure — but it is a
+ * projected estimate based on past variance, not a measured production
+ * outcome, and the response says so explicitly.
  */
 const getDemandForecast = async (req, res) => {
   try {
@@ -48,27 +54,47 @@ const getDemandForecast = async (req, res) => {
     const pastDates = Object.keys(mealCountsByDate);
     const occurrences = pastDates.length;
 
-    const totals = { breakfast: 0, lunch: 0, dinner: 0 };
+    const perMeal = { breakfast: [], lunch: [], dinner: [] };
     pastDates.forEach((d) => {
-      totals.breakfast += mealCountsByDate[d].breakfast;
-      totals.lunch += mealCountsByDate[d].lunch;
-      totals.dinner += mealCountsByDate[d].dinner;
+      perMeal.breakfast.push(mealCountsByDate[d].breakfast);
+      perMeal.lunch.push(mealCountsByDate[d].lunch);
+      perMeal.dinner.push(mealCountsByDate[d].dinner);
     });
+
+    const sum = (arr) => arr.reduce((a, b) => a + b, 0);
+    const max = (arr) => (arr.length ? Math.max(...arr) : 0);
 
     const forecast = occurrences > 0
       ? {
-          breakfast: Math.round(totals.breakfast / occurrences),
-          lunch: Math.round(totals.lunch / occurrences),
-          dinner: Math.round(totals.dinner / occurrences),
+          breakfast: Math.round(sum(perMeal.breakfast) / occurrences),
+          lunch: Math.round(sum(perMeal.lunch) / occurrences),
+          dinner: Math.round(sum(perMeal.dinner) / occurrences),
         }
       : { breakfast: 0, lunch: 0, dinner: 0 };
+
+    const peak = {
+      breakfast: max(perMeal.breakfast),
+      lunch: max(perMeal.lunch),
+      dinner: max(perMeal.dinner),
+    };
+
+    // Compare TOTAL meals across the day, forecast vs. always-prepare-for-peak.
+    const totalForecast = forecast.breakfast + forecast.lunch + forecast.dinner;
+    const totalPeak = peak.breakfast + peak.lunch + peak.dinner;
+    const estimatedPrepReductionPct =
+      occurrences > 1 && totalPeak > 0
+        ? Math.round(((totalPeak - totalForecast) / totalPeak) * 100)
+        : null; // not enough history yet to estimate variance meaningfully
 
     res.status(200).json({
       targetDate: targetDateStr,
       dayOfWeek: targetWeekday,
       forecast,
+      historicalPeak: peak,
+      estimatedPrepReductionPct,
       basedOnPastOccurrences: occurrences,
       method: "Average historical attendance for this day of the week (simple heuristic, not a trained model).",
+      note: "estimatedPrepReductionPct compares the forecast to the historical PEAK turnout for this weekday — i.e. how much less a kitchen might prepare by cooking to this forecast instead of always preparing for the worst case. It is a projected estimate from past variance, not a measured wastage or cost reduction.",
     });
   } catch (err) {
     console.error(err);
