@@ -14,6 +14,7 @@ async function cacheGet(key) {
     const raw = await client.get(key);
     return raw ? JSON.parse(raw) : null;
   } catch (err) {
+    console.warn(`[redis] cacheGet(${key}) failed:`, err.message); // TEMP: remove once HIT/MISS is confirmed working
     return null;
   }
 }
@@ -23,7 +24,7 @@ async function cacheSet(key, value, ttlSeconds = 3600) {
   try {
     await client.set(key, JSON.stringify(value), "EX", ttlSeconds);
   } catch (err) {
-    /* ignore — cache is best-effort */
+    console.warn(`[redis] cacheSet(${key}) failed:`, err.message); // TEMP: remove once HIT/MISS is confirmed working
   }
 }
 
@@ -32,7 +33,7 @@ async function cacheDel(...keys) {
   try {
     await client.del(keys.flat());
   } catch (err) {
-    /* ignore */
+    console.warn(`[redis] cacheDel(${keys}) failed:`, err.message); // TEMP: remove once HIT/MISS is confirmed working
   }
 }
 
